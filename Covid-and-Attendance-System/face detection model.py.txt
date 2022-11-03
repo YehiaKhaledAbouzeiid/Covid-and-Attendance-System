@@ -1,0 +1,45 @@
+import torch
+import torchvision.transforms as transforms
+import cv2
+from model.resnet import Resnet34Triplet
+
+flag_gpu_available = torch.cuda.is_available()
+if flag_gpu_available:
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+
+checkpoint = torch.load('model/model_resnet34_triplet.pt', map_location=device)
+model = Resnet34Triplet(embedding_dimension=checkpoint['embedding_dimension'])
+model.load_state_dict(checkpoint['model_state_dict'])
+best_distance_threshold = checkpoint['best_distance_threshold']
+
+model.to(device)
+model.eval()
+
+preprocess = transforms.Compose([
+  transforms.ToPILImage(),
+  transforms.Resize(size=140),  # Pre-trained model uses 140x140 input images
+  transforms.ToTensor(),
+  transforms.Normalize(
+      mean=[0.6071, 0.4609, 0.3944],  # Normalization settings for the model, the calculated mean and std values
+      std=[0.2457, 0.2175, 0.2129]     # for the RGB channels of the tightly-cropped glint360k face dataset
+  )
+])
+
+img = cv2.imread('face.jpg')  # Or from a cv2 video capture stream
+
+# Note that you need to use a face detection model here to crop the face from the image and then
+#  create a new face image object that will be inputted to the facial recognition model later.
+
+# Convert the image from BGR color (which OpenCV uses) to RGB color
+img = img[:, :, ::-1]
+
+img = preprocess(img)
+img = img.unsqueeze(0)
+img = img.to(device)
+
+embedding = model(img)
+
+# Turn embedding Torch Tensor to Numpy array
+embedding = embedding.cpu().detach().numpy()
